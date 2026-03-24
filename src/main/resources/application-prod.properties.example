@@ -1,0 +1,35 @@
+# ── Server ──
+server.port=8080
+
+# ── PostgreSQL ──
+spring.datasource.url=jdbc:postgresql://your-prod-host:5432/camerarental
+spring.datasource.username=your-db-username
+spring.datasource.password=your-db-password
+spring.datasource.driver-class-name=org.postgresql.Driver
+
+# ── JPA / Hibernate ──
+spring.jpa.hibernate.ddl-auto=validate
+spring.jpa.show-sql=false
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+
+# ── H2 Console disabled ──
+spring.h2.console.enabled=false
+
+# ── Redis ──
+spring.data.redis.host=your-redis-host
+spring.data.redis.port=6379
+app.rate-limiting.use-redis=true
+
+# ── Logging ──
+logging.level.org.springframework.security=WARN
+logging.level.com.camerarental=INFO
+
+# ── JWT ──
+spring.app.jwtExpiration=3600000
+spring.app.jwtSecret=your-jwt-secret-key-min-64-characters-long-for-hs512-signing
+
+# ── CORS ──
+security.auth.allowed-origins=https://your-production-domain.com
+
+# ── Swagger docs disabled in production ──
+app.security.allow-docs=false

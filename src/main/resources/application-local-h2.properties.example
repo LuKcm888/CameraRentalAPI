@@ -1,0 +1,30 @@
+# ── Server ──
+server.port=8080
+
+# ── H2 In-Memory Database ──
+spring.datasource.url=jdbc:h2:mem:camerarental
+spring.datasource.driver-class-name=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=your-h2-password
+
+# ── JPA / Hibernate ──
+spring.jpa.hibernate.ddl-auto=create-drop
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+
+# ── H2 Console ──
+spring.h2.console.enabled=true
+spring.h2.console.path=/h2-console
+spring.h2.console.settings.web-allow-others=false
+
+# ── Logging ──
+logging.level.org.springframework.security=DEBUG
+logging.level.com.camerarental=DEBUG
+logging.level.org.hibernate.SQL=DEBUG
+
+# ── JWT ──
+spring.app.jwtExpiration=3600000
+spring.app.jwtSecret=your-jwt-secret-key-min-64-characters-long-for-hs512-signing
+
+# ── CORS ──
+security.auth.allowed-origins=http://localhost:3000,http://localhost:5173
