@@ -37,4 +37,11 @@ public interface CameraRepository extends JpaRepository<Camera, UUID> {
     @Query("SELECT c FROM Camera c WHERE LOWER(c.brand) LIKE LOWER(CONCAT('%', :search, '%')) " +
            "OR LOWER(c.modelName) LIKE LOWER(CONCAT('%', :search, '%'))")
     Page<Camera> searchByBrandOrModelName(@Param("search") String search, Pageable pageable);
+
+    Page<Camera> findAllByIsActiveTrue(Pageable pageable);
+
+    @Query("SELECT c FROM Camera c WHERE c.isActive = true AND " +
+           "(LOWER(c.brand) LIKE LOWER(CONCAT('%', :search, '%')) " +
+           "OR LOWER(c.modelName) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Camera> searchActiveByBrandOrModelName(@Param("search") String search, Pageable pageable);
 }

@@ -4,6 +4,7 @@ import com.camerarental.backend.config.AbstractPostgresIT;
 import com.camerarental.backend.config.ApiPaths;
 import com.camerarental.backend.config.PostgresIntegrationTest;
 import com.camerarental.backend.model.entity.Camera;
+import com.camerarental.backend.model.entity.InventoryItem;
 import com.camerarental.backend.model.entity.User;
 import com.camerarental.backend.payload.CameraDTO;
 import com.camerarental.backend.model.entity.enums.CameraCategory;
@@ -204,8 +205,8 @@ class CameraControllerIT extends AbstractPostgresIT {
     class DeleteTests {
 
         @Test
-        @DisplayName("admin can delete a camera and gets 204")
-        void delete_asAdmin_returns204() throws Exception {
+        @DisplayName("admin can delete a camera with no inventory and gets 204")
+        void delete_noInventory_returns204() throws Exception {
             Camera camera = createCamera("Sony", "A7 IV");
 
             mockMvc.perform(delete(ApiPaths.CAMERAS + "/" + camera.getCameraId())
@@ -218,11 +219,103 @@ class CameraControllerIT extends AbstractPostgresIT {
         }
 
         @Test
+        @DisplayName("admin can delete a camera whose inventory has zero units")
+        void delete_emptyInventory_cascadesAndReturns204() throws Exception {
+            Camera camera = createCamera("Sony", "A7 IV");
+            createInventoryItem(camera, "50.00", "2500.00");
+
+            mockMvc.perform(delete(ApiPaths.CAMERAS + "/" + camera.getCameraId())
+                            .with(authenticated(admin)))
+                    .andExpect(status().isNoContent());
+
+            mockMvc.perform(get(ApiPaths.CAMERAS + "/" + camera.getCameraId())
+                            .with(authenticated(admin)))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("returns 409 when physical units still exist")
+        void delete_withUnits_returns409() throws Exception {
+            Camera camera = createCamera("Sony", "A7 IV");
+            InventoryItem inv = createInventoryItem(camera, "50.00", "2500.00");
+            createPhysicalUnit(inv, "SN-001");
+
+            mockMvc.perform(delete(ApiPaths.CAMERAS + "/" + camera.getCameraId())
+                            .with(authenticated(admin)))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.message", containsString("physical unit(s) still on record")));
+        }
+
+        @Test
         @DisplayName("customer gets 403 when deleting")
         void delete_asCustomer_returns403() throws Exception {
             Camera camera = createCamera("Sony", "A7 IV");
 
             mockMvc.perform(delete(ApiPaths.CAMERAS + "/" + camera.getCameraId())
+                            .with(authenticated(customer)))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // PATCH /api/v1/cameras/{cameraId}/deactivate
+    // -------------------------------------------------------------------------
+
+    @Nested
+    @DisplayName("PATCH " + ApiPaths.CAMERAS + "/{cameraId}/deactivate")
+    class DeactivateTests {
+
+        @Test
+        @DisplayName("admin can deactivate a camera")
+        void deactivate_asAdmin_setsInactive() throws Exception {
+            Camera camera = createCamera("Sony", "A7 IV");
+
+            mockMvc.perform(patch(ApiPaths.CAMERAS + "/" + camera.getCameraId() + "/deactivate")
+                            .with(authenticated(admin)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.active").value(false));
+        }
+
+        @Test
+        @DisplayName("deactivated camera is hidden from default listing")
+        void deactivate_hiddenFromDefaultListing() throws Exception {
+            createCamera("Sony", "A7 IV");
+            Camera toDeactivate = createCamera("Canon", "R5");
+
+            mockMvc.perform(patch(ApiPaths.CAMERAS + "/" + toDeactivate.getCameraId() + "/deactivate")
+                            .with(authenticated(admin)))
+                    .andExpect(status().isOk());
+
+            mockMvc.perform(get(ApiPaths.CAMERAS)
+                            .with(authenticated(customer)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content", hasSize(1)))
+                    .andExpect(jsonPath("$.content[0].brand").value("Sony"));
+        }
+
+        @Test
+        @DisplayName("deactivated camera visible with includeInactive=true")
+        void deactivate_visibleWithIncludeInactive() throws Exception {
+            createCamera("Sony", "A7 IV");
+            Camera toDeactivate = createCamera("Canon", "R5");
+
+            mockMvc.perform(patch(ApiPaths.CAMERAS + "/" + toDeactivate.getCameraId() + "/deactivate")
+                            .with(authenticated(admin)))
+                    .andExpect(status().isOk());
+
+            mockMvc.perform(get(ApiPaths.CAMERAS)
+                            .param("includeInactive", "true")
+                            .with(authenticated(admin)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content", hasSize(2)));
+        }
+
+        @Test
+        @DisplayName("customer gets 403 when deactivating")
+        void deactivate_asCustomer_returns403() throws Exception {
+            Camera camera = createCamera("Sony", "A7 IV");
+
+            mockMvc.perform(patch(ApiPaths.CAMERAS + "/" + camera.getCameraId() + "/deactivate")
                             .with(authenticated(customer)))
                     .andExpect(status().isForbidden());
         }

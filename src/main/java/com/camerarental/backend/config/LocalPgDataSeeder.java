@@ -5,8 +5,10 @@ import com.camerarental.backend.model.entity.enums.*;
 import com.camerarental.backend.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.CommandLineRunner;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Profile;
+import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,8 +25,9 @@ import java.util.UUID;
 @Slf4j
 @Component
 @Profile("local-pg")
+@Order(2)
 @RequiredArgsConstructor
-public class LocalPgDataSeeder implements CommandLineRunner {
+public class LocalPgDataSeeder implements ApplicationRunner {
 
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
@@ -36,26 +39,12 @@ public class LocalPgDataSeeder implements CommandLineRunner {
 
     @Override
     @Transactional
-    public void run(String... args) {
-        seedRoles();
+    public void run(ApplicationArguments args) {
         seedUsers();
         List<Camera> cameras = seedCameras();
         seedInventoryAndUnits(cameras);
         seedBusinessHours();
         log.info("Local-pg seed data loaded successfully");
-    }
-
-    private void seedRoles() {
-        if (roleRepository.count() > 0) {
-            log.info("Roles already present – skipping");
-            return;
-        }
-        roleRepository.saveAll(List.of(
-                new Role(AppRole.ROLE_CUSTOMER),
-                new Role(AppRole.ROLE_VENDOR),
-                new Role(AppRole.ROLE_ADMIN)
-        ));
-        log.info("Seeded 3 roles");
     }
 
     private void seedUsers() {

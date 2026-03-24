@@ -37,14 +37,18 @@ public class CameraController {
 
     @PreAuthorize("hasRole('ADMIN') or hasRole('VENDOR') or hasRole('CUSTOMER')")
     @GetMapping
-    @Operation(summary = "Get all Cameras", description = "Returns a paginated list of cameras with optional search")
+    @Operation(summary = "Get all Cameras",
+            description = "Returns a paginated list of cameras. By default only active cameras are returned. "
+                    + "Admins can pass includeInactive=true to see deactivated cameras as well.")
     public ResponseEntity<PagedResponse<CameraDTO>> getAll(
             @RequestParam(name = "search", required = false) String search,
+            @RequestParam(name = "includeInactive", defaultValue = "false") boolean includeInactive,
             @RequestParam(name = "pageNumber", defaultValue = AppConstants.DEFAULT_PAGE_NUMBER) @Min(value = 0, message = "pageNumber must be >= 0") Integer pageNumber,
             @RequestParam(name = "pageSize", defaultValue = AppConstants.DEFAULT_PAGE_SIZE) @Min(value = 1, message = "pageSize must be >= 1") Integer pageSize,
             @RequestParam(name = "sortBy", defaultValue = AppConstants.SORT_CAMERAS_BY) String sortBy,
             @RequestParam(name = "sortOrder", defaultValue = AppConstants.SORT_DIR) String sortOrder) {
-        PagedResponse<CameraDTO> response = cameraService.getCameras(search, pageNumber, pageSize, sortBy, sortOrder);
+        PagedResponse<CameraDTO> response = cameraService.getCameras(search, includeInactive,
+                pageNumber, pageSize, sortBy, sortOrder);
         return ResponseEntity.ok(response);
     }
 
@@ -66,11 +70,59 @@ public class CameraController {
         return ResponseEntity.ok(updatedDTO);
     }
 
+    /**
+     * Permanently removes a camera from the catalog.
+     *
+     * <h3>This endpoint is rarely used in production</h3>
+     *
+     * <p>In a real camera-rental business, catalog items are almost never
+     * hard-deleted.  Every camera that has been rented, insured, or
+     * depreciated is linked to historical records (rental agreements,
+     * maintenance logs, revenue reports).  Deleting the catalog entry
+     * would orphan that data and break financial audits.</p>
+     *
+     * <p>The <strong>preferred workflow</strong> is to deactivate the
+     * camera via {@code PATCH /{cameraId}/deactivate}, which sets
+     * {@code isActive = false} and hides it from customer-facing
+     * listings while preserving all history.</p>
+     *
+     * <p>Hard-delete exists strictly as a <strong>data-cleanup</strong>
+     * tool — for example, removing a camera that was created by mistake
+     * or a duplicate entry that was never rented out.</p>
+     *
+     * <h3>Safety checks</h3>
+     *
+     * <p>The service rejects the delete with {@code 409 Conflict} if
+     * physical units still exist under this camera's inventory.  The
+     * admin must retire or remove all units first.  An empty inventory
+     * record (zero units) is cascade-deleted automatically.</p>
+     */
     @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{cameraId}")
-    @Operation(summary = "Delete a Camera", description = "Deletes a camera from the database. Admin use only")
+    @Operation(
+            summary = "Hard-delete a camera (rarely used)",
+            description = "Permanently removes a camera from the catalog. "
+                    + "Rejected with 409 if physical units still exist. "
+                    + "Prefer PATCH /{cameraId}/deactivate for normal retirement."
+    )
     public ResponseEntity<Void> delete(@PathVariable UUID cameraId) {
         cameraService.deleteCamera(cameraId);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Soft-deletes a camera by marking it inactive. This is the
+     * recommended way to retire a camera from the catalog.
+     */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PatchMapping("/{cameraId}/deactivate")
+    @Operation(
+            summary = "Deactivate a camera (recommended)",
+            description = "Sets isActive=false so the camera no longer appears in "
+                    + "customer-facing listings but all historical data is preserved."
+    )
+    public ResponseEntity<CameraDTO> deactivate(@PathVariable UUID cameraId) {
+        CameraDTO dto = cameraService.deactivateCamera(cameraId);
+        return ResponseEntity.ok(dto);
     }
 }

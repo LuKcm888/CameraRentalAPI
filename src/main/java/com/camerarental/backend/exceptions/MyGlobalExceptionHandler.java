@@ -5,6 +5,7 @@ import com.camerarental.backend.payload.base.APIResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -178,6 +179,32 @@ public class MyGlobalExceptionHandler {
                 message);
 
         return new ResponseEntity<>(apiResponse, HttpStatus.NOT_FOUND);
+    }
+
+    @ExceptionHandler(ResourceConflictException.class)
+    public ResponseEntity<APIResponse> handleResourceConflict(
+            ResourceConflictException e,
+            HttpServletRequest request
+    ) {
+        log.warn("resource_conflict path={} message={}", request.getRequestURI(), e.getMessage());
+        return new ResponseEntity<>(new APIResponse(e.getMessage(), false), HttpStatus.CONFLICT);
+    }
+
+    /**
+     * Safety-net for any foreign-key or unique-constraint violations that
+     * slip past service-layer checks. Returns {@code 409 Conflict} instead
+     * of a raw {@code 500 Internal Server Error}.
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<APIResponse> handleDataIntegrityViolation(
+            DataIntegrityViolationException e,
+            HttpServletRequest request
+    ) {
+        log.error("data_integrity_violation path={} message={}", request.getRequestURI(),
+                e.getMostSpecificCause().getMessage());
+        return new ResponseEntity<>(
+                new APIResponse("Operation conflicts with existing data. Check related records and try again.", false),
+                HttpStatus.CONFLICT);
     }
 
 }

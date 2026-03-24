@@ -1,11 +1,15 @@
 package com.camerarental.backend.service;
 
 import com.camerarental.backend.exceptions.ApiException;
+import com.camerarental.backend.exceptions.ResourceConflictException;
 import com.camerarental.backend.exceptions.ResourceNotFoundException;
 import com.camerarental.backend.model.entity.Camera;
+import com.camerarental.backend.model.entity.InventoryItem;
 import com.camerarental.backend.payload.CameraDTO;
 import com.camerarental.backend.payload.base.PagedResponse;
 import com.camerarental.backend.repository.CameraRepository;
+import com.camerarental.backend.repository.InventoryItemRepository;
+import com.camerarental.backend.repository.PhysicalUnitRepository;
 import com.camerarental.backend.util.PaginationHelper;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
@@ -14,6 +18,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -40,6 +45,8 @@ public class CameraServiceImpl implements CameraService {
     private final ModelMapper modelMapper;
     private final PaginationHelper paginationHelper;
     private final CameraRepository cameraRepository;
+    private final InventoryItemRepository inventoryItemRepository;
+    private final PhysicalUnitRepository physicalUnitRepository;
 
     @Override
     @Transactional
@@ -66,14 +73,24 @@ public class CameraServiceImpl implements CameraService {
 
     @Override
     @Transactional(readOnly = true)
-    public PagedResponse<CameraDTO> getCameras(String search, Integer pageNumber, Integer pageSize,
+    public PagedResponse<CameraDTO> getCameras(String search, boolean includeInactive,
+                                               Integer pageNumber, Integer pageSize,
                                                String sortBy, String sortOrder) {
         Pageable pageable = paginationHelper.buildPageable(pageNumber, pageSize, sortBy, sortOrder,
                 ALLOWED_SORT_FIELDS, DEFAULT_SORT_FIELD);
 
-        Page<Camera> pageCameras = (search == null || search.isBlank())
-                ? cameraRepository.findAll(pageable)
-                : cameraRepository.searchByBrandOrModelName(search, pageable);
+        boolean hasSearch = search != null && !search.isBlank();
+
+        Page<Camera> pageCameras;
+        if (includeInactive) {
+            pageCameras = hasSearch
+                    ? cameraRepository.searchByBrandOrModelName(search, pageable)
+                    : cameraRepository.findAll(pageable);
+        } else {
+            pageCameras = hasSearch
+                    ? cameraRepository.searchActiveByBrandOrModelName(search, pageable)
+                    : cameraRepository.findAllByIsActiveTrue(pageable);
+        }
 
         return PagedResponse.from(pageCameras, camera -> modelMapper.map(camera, CameraDTO.class));
     }
@@ -114,6 +131,34 @@ public class CameraServiceImpl implements CameraService {
         Camera camera = cameraRepository.findById(cameraId)
                 .orElseThrow(() -> new ResourceNotFoundException("Camera", "cameraId", cameraId));
 
+        Optional<InventoryItem> inventoryOpt = inventoryItemRepository.findByCameraCameraId(cameraId);
+
+        if (inventoryOpt.isPresent()) {
+            InventoryItem inventory = inventoryOpt.get();
+            long unitCount = physicalUnitRepository
+                    .countByInventoryItemInventoryItemId(inventory.getInventoryItemId());
+
+            if (unitCount > 0) {
+                throw new ResourceConflictException(
+                        "Cannot delete camera '" + camera.getBrand() + " " + camera.getModelName()
+                                + "': " + unitCount + " physical unit(s) still on record. "
+                                + "Retire or remove all units first, or deactivate the camera instead.");
+            }
+
+            inventoryItemRepository.delete(inventory);
+        }
+
         cameraRepository.delete(camera);
+    }
+
+    @Override
+    @Transactional
+    public CameraDTO deactivateCamera(UUID cameraId) {
+        Camera camera = cameraRepository.findById(cameraId)
+                .orElseThrow(() -> new ResourceNotFoundException("Camera", "cameraId", cameraId));
+
+        camera.setActive(false);
+        Camera saved = cameraRepository.save(camera);
+        return modelMapper.map(saved, CameraDTO.class);
     }
 }

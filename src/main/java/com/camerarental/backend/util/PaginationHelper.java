@@ -56,7 +56,7 @@ public class PaginationHelper {
      * @return The validated sort field
      */
     public String resolveSortField(String sortBy, Set<String> allowedFields, String defaultField) {
-        if (allowedFields.contains(sortBy)) {
+        if (sortBy != null && allowedFields.contains(sortBy)) {
             return sortBy;
         }
         return defaultField;
